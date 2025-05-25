@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Media Gallery</title>
+    <style>
+        /* 基础布局样式 */
+        .gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 15px;
+            padding: 20px;
+        }
+        
+        .media-item {
+            border: 1px solid #eee;
+            border-radius: 8px;
+            padding: 10px;
+            text-align: center;
+            transition: transform 0.3s;
+            background: #fff;
+        }
+
+        /* 加载动画 */
+        .loader {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+            font-size: 1.2em;
+        }
+
+        /* 图片样式 */
+        .media-item img {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+            border-radius: 4px;
+            background: linear-gradient(120deg, #f5f5f5 30%, #fff 50%, #f5f5f5 70%);
+            background-size: 300% 300%;
+            animation: shimmer 1.5s infinite;
+        }
+
+        /* 视频样式 */
+        video {
+            width: 100%;
+            height: 200px;
+            background: #f5f5f5;
+            border-radius: 4px;
+        }
+
+        /* 加载动画 */
+        @keyframes shimmer {
+            0% { background-position: 100% 50%; }
+            100% { background-position: -100% 50%; }
+        }
+
+        /* 文件名样式 */
+        .file-name {
+            margin-top: 10px;
+            color: #666;
+            font-size: 0.9em;
+            word-break: break-all;
+            padding: 0 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1 style="text-align: center; color: #333; margin: 20px 0;">📁 我的媒体库</h1>
+    <div class="gallery" id="gallery">
+        <div class="loader">🔄 内容加载中...</div>
+    </div>
+
+<script>
+// ================= 配置区 =================
+const CONFIG = {
+    githubUser: "250502520",    // GitHub用户名
+    repoName: "all",           // 仓库名称
+    branch: "main",            // 分支名称
+    mediaPath: "assets/media"  // 媒体文件夹路径
+};
+
+// ================= 核心逻辑 =================
+async function initGallery() {
+    const gallery = document.getElementById('gallery');
+    
+    try {
+        // 请求文件列表
+        const apiUrl = `https://api.github.com/repos/${CONFIG.githubUser}/${CONFIG.repoName}/contents/${CONFIG.mediaPath}?ref=${CONFIG.branch}`;
+        const response = await fetch(apiUrl);
+        if (!response.ok) throw new Error(`请求失败: ${response.status}`);
+        
+        // 初始化懒加载观察器
+        const observer = new IntersectionObserver(handleIntersection, {
+            rootMargin: '200px',
+            threshold: 0.01
+        });
+
+        // 处理文件数据
+        const files = await response.json();
+        gallery.innerHTML = ''; // 清空加载提示
+
+        files.forEach(file => {
+            const item = createMediaItem(file);
+            gallery.appendChild(item);
+            observer.observe(item); // 注册懒加载
+        });
+
+    } catch (error) {
+        gallery.innerHTML = `<p style="color: red; text-align: center;">❌ 加载失败: ${error.message}</p>`;
+    }
+}
+
+function createMediaItem(file) {
+    const container = document.createElement('div');
+    container.className = 'media-item';
+
+    // 生成CDN加速链接
+    const cdnUrl = `https://cdn.jsdelivr.net/gh/${CONFIG.githubUser}/${CONFIG.repoName}@${CONFIG.branch}/${CONFIG.mediaPath}/${file.name}`;
+
+    if (isImage(file.name)) {
+        // 图片元素
+        const img = new Image();
+        img.dataset.src = cdnUrl; // 延迟加载源
+        img.alt = file.name;
+        img.loading = "lazy";
+        container.appendChild(img);
+
+    } else if (isVideo(file.name)) {
+        // 视频元素
+        const video = document.createElement('video');
+        video.controls = true;
+        video.preload = "metadata";
+        video.innerHTML = `
+            <source data-src="${cdnUrl}" type="video/${getFileType(file.name)}">
+        `;
+        container.appendChild(video);
+    }
+
+    // 添加文件名
+    const fileName = document.createElement('div');
+    fileName.className = 'file-name';
+    fileName.textContent = file.name;
+    container.appendChild(fileName);
+
+    return container;
+}
+
+function handleIntersection(entries) {
+    entries.forEach(entry => {
+        if (entry.isIntersecting) {
+            const target = entry.target;
+            // 加载图片
+            const img = target.querySelector('img');
+            if (img && img.dataset.src) {
+                img.src = img.dataset.src;
+                delete img.dataset.src;
+            }
+            // 加载视频
+            const videoSource = target.querySelector('source[data-src]');
+            if (videoSource) {
+                videoSource.src = videoSource.dataset.src;
+                videoSource.parentElement.load();
+                delete videoSource.dataset.src;
+            }
+            // 停止观察
+            observer.unobserve(target);
+        }
+    });
+}
+
+// ================= 工具函数 =================
+const isImage = name => /\.(jpe?g|png|webp|gif)$/i.test(name);
+const isVideo = name => /\.(mp4|webm)$/i.test(name);
+const getFileType = name => name.split('.').pop().toLowerCase();
+
+// ================= 初始化 =================
+window.addEventListener('DOMContentLoaded', initGallery);
+</script>
+</body>
+</html>
